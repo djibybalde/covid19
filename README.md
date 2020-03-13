@@ -1,7 +1,7 @@
-djiby
+COVID-19 Project
 ==============================
 
-build a project using covid19 dataset
+Build a project using covid19 (coronavirus) dataset
 
 Project Organization
 ------------
