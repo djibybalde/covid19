@@ -10,7 +10,6 @@ import dash_core_components as dcc
 import dash_html_components as html
 from dash.dependencies import Input, Output
 
-
 # Lecture du fichier d'environnement
 ENV_FILE = '../env.yaml'
 with open(ENV_FILE) as f:
@@ -26,8 +25,7 @@ DATA_FILE = os.path.join(ROOT_DIR,
 epidemie_df = (pd.read_csv(DATA_FILE, parse_dates=['Last Update'])
                .assign(day=lambda _df: _df['Last Update'].dt.date)
                .drop_duplicates(subset=['Country/Region', 'Province/State', 'day'])
-               [lambda df: df['day'] <= datetime.date(2020, 3, 10)]
-              )
+               [lambda df: df['day'] <= datetime.date(2020, 3, 10)])
 
 countries = [{'label': c, 'value': c} for c in sorted(epidemie_df['Country/Region'].unique())]
 
@@ -39,14 +37,12 @@ app.layout = html.Div([
             html.Div([
                 dcc.Dropdown(
                     id='country',
-                    options=countries
-                )
+                    options=countries)
             ]),
             html.Div([
                 dcc.Dropdown(
                     id='country2',
-                    options=countries
-                )
+                    options=countries)
             ]),
             html.Div([
                 dcc.RadioItems(
@@ -57,8 +53,7 @@ app.layout = html.Div([
                         {'label': 'Recovered', 'value': 'Recovered'}
                     ],
                     value='Confirmed',
-                    labelStyle={'display': 'inline-block'}
-                )
+                    labelStyle={'display': 'inline-block'})
             ]),
             html.Div([
                 dcc.Graph(id='graph1')
@@ -72,8 +67,7 @@ app.layout = html.Div([
                 max=(epidemie_df['day'].max() - epidemie_df['day'].min()).days,
                 value=0,
                 #marks={i:str(date) for i, date in enumerate(epidemie_df['day'].unique())}
-                marks={i:str(i) for i, date in enumerate(epidemie_df['day'].unique())}
-            )  
+                marks={i:str(i) for i, date in enumerate(epidemie_df['day'].unique())})  
         ]),
     ]),
 ])
@@ -94,14 +88,12 @@ def update_graph(country, country2, variable):
         graph_df = (epidemie_df[epidemie_df['Country/Region'] == country]
                     .groupby(['Country/Region', 'day'])
                     .agg({variable: 'sum'})
-                    .reset_index()
-                   )
+                    .reset_index())
     if country2 is not None:
         graph2_df = (epidemie_df[epidemie_df['Country/Region'] == country2]
                      .groupby(['Country/Region', 'day'])
                      .agg({variable: 'sum'})
-                     .reset_index()
-                    )
+                     .reset_index())
 
         
     #data : [dict(...graph_df...)] + ([dict(...graph2_df)] if country2 is not None else [])
@@ -112,15 +104,13 @@ def update_graph(country, country2, variable):
                 x=graph_df['day'],
                 y=graph_df[variable],
                 type='line',
-                name=country if country is not None else 'Total'
-            )
+                name=country if country is not None else 'Total')
         ] + ([
             dict(
                 x=graph2_df['day'],
                 y=graph2_df[variable],
                 type='line',
-                name=country2
-            )            
+                name=country2)            
         ] if country2 is not None else [])
     }
 
@@ -135,30 +125,29 @@ def update_map(map_day):
     map_df = (epidemie_df[epidemie_df['day'] == day]
               .groupby(['Country/Region'])
               .agg({'Confirmed': 'sum', 'Latitude': 'mean', 'Longitude': 'mean'})
-              .reset_index()
-             )
+              .reset_index())
     print(map_day)
     print(day)
-    print(map_df.head())
+    
     return {
-        'data': [
+        'data':[
             dict(
                 type='scattergeo',
                 lon=map_df['Longitude'],
                 lat=map_df['Latitude'],
-                text=map_df.apply(lambda r: r['Country/Region'] + ' (' + str(r['Confirmed']) + ')', axis=1),
+                text=map_df.apply(lambda r: r['Country/Region']+' ('+str(r['Confirmed'])+')',
+                                  axis=1),
                 mode='markers',
                 marker=dict(
                     size=np.maximum(map_df['Confirmed'] / 1_000, 5)
                 )
-            )
-        ],
+            )],
         'layout': dict(
             title=str(day),
             geo=dict(showland=True),
         )
     }
 
-
+# La partie a excuter unique si on tape la ligna de commende python myfilename.py; on n'a pas besoin de reexecuter las commende sur le terminal, il se fait tous seul
 if __name__ == '__main__':
     app.run_server(debug=True)
