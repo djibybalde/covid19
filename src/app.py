@@ -1,9 +1,10 @@
-# ================================================================
+# ===========================================================
 # ======= Importing Libraries ====================================
-# ================================================================
+# ===========================================================
 import datetime
 import os
 import yaml
+import collections
 
 import numpy as np
 import pandas as pd
@@ -17,6 +18,7 @@ from scipy.integrate import solve_ivp
 from scipy.optimize import minimize
 
 import plotly.graph_objs as go
+import dash_table
 
 # ================================================================
 # ======= Reading data ===========================================
@@ -37,7 +39,11 @@ epidemie_df = (pd.read_csv(DATA_FILE, parse_dates=['Last Update'])
                .drop_duplicates(subset=['Country/Region', 'Province/State', 'day'])
                [lambda df: df['day'] <= datetime.date(2020, 3, 10)])
 
-countries = [{'label': c, 'value': c} for c in sorted(epidemie_df['Country/Region'].unique())]
+epidemie_df.columns = epidemie_df.columns.str.replace('/', '_')
+cloumns = ['Country_Region','day','Confirmed','Deaths','Recovered','Latitude','Longitude']
+epidemie_df = epidemie_df[cloumns]
+
+countries = [{'label': c, 'value': c} for c in sorted(epidemie_df['Country_Region'].unique())]
 
 regions = {
     'world': {'lat': 0, 'lon': 0, 'zoom': 1},
@@ -56,52 +62,6 @@ app = dash.Dash('Covid19: Data Explorations')
 app.layout = html.Div([
     html.H1(['Corona Virus Data Explorations'], style={'textAlign': 'center'}),
     dcc.Tabs([
-# ======= Time Series ============================================
-            dcc.Tab(label='Time Series', children=[
-                """
-                Select your first country
-                """,
-                html.Div([
-                    dcc.Dropdown(
-                        id='country',
-                        options=countries,
-                        style={"display": "inline-block", 
-                               "margin-left": "auto", 
-                               "margin-right": "auto",
-                               "width": "30%"} 
-                    )
-                ]),
-                """
-                Select your second country
-                """,
-                html.Div([
-                    dcc.Dropdown(
-                        id='country2',
-                        options=countries,
-                        style={"display": "inline-block",
-                               "margin-left": "auto", 
-                               "margin-right": "auto",
-                               "width": "30%"}
-                    )
-                ]),
-                """
-                Change your variable
-                """,
-                html.Div([
-                    dcc.RadioItems(
-                        id='variable',
-                        options=[
-                            {'label': 'Confirmed', 'value': 'Confirmed'},
-                            {'label': 'Deaths', 'value': 'Deaths'},
-                            {'label': 'Recovered', 'value': 'Recovered'}
-                        ],
-                        value='Confirmed'
-                    )
-                ]),
-                html.Div([
-                    dcc.Graph(id='graph1')
-                ]), 
-            ]),
 # ======= Map ====================================================       
         dcc.Tab(label='Map', children=[
             """
@@ -167,7 +127,11 @@ app.layout = html.Div([
                 )
             ]),
             html.Div([
-                dcc.Graph(id='map')
+                dcc.Graph(id='map',
+                config={
+                    'displayModeBar': True
+                    }
+                    )
             ]),
             """
             Time
@@ -177,10 +141,93 @@ app.layout = html.Div([
                     id='map_day',
                     min=0,
                     max=(epidemie_df['day'].max() - epidemie_df['day'].min()).days,
-                    value=0,
+                    value=21,
                     marks={i:'t'+str(i) for i, date in enumerate(epidemie_df['day'].unique())})
             ]),
-        ]),
+        ]),  
+# ======= Time Series ============================================
+            dcc.Tab(label='Country Comparison', children=[
+                """
+                Select your countries
+                """,
+                dcc.Store(id='memory_output'),
+                html.Div([
+                    dcc.Dropdown(
+                        id='memory_countries',
+                        multi=True,
+                        options=countries,
+                        value=['France', 'Spain','Germany', 'UK'],
+                    )
+                ]),
+                """
+                Change your variable
+                """,
+                html.Div([
+                    dcc.Dropdown(
+                        id='memory_field',
+                        options=[
+                            {'label': 'Confirmed', 'value': 'Confirmed'},
+                            {'label': 'Deaths', 'value': 'Deaths'},
+                            {'label': 'Recovered', 'value': 'Recovered'}
+                        ],
+                        value='Confirmed'
+                    )
+                ]),
+                html.Div([
+                    dcc.Graph(id='memory_graph'),
+                    dash_table.DataTable(
+                        id='memory_table',
+                        columns=[{'name': i, 'id': i} for i in epidemie_df.columns]
+                    ),
+                ])
+            ]),        
+# ======= Time Series ============================================
+            dcc.Tab(label='Time Series', children=[
+                """
+                Select your first country
+                """,
+                html.Div([
+                    dcc.Dropdown(
+                        id='country',
+                        options=countries,
+                        style={"display": "inline-block", 
+                               "margin-left": "auto", 
+                               "margin-right": "auto",
+                               "width": "30%"} 
+                    )
+                ]),
+                """
+                Select your second country
+                """,
+                html.Div([
+                    dcc.Dropdown(
+                        id='country2',
+                        options=countries,
+                        style={"display": "inline-block",
+                               "margin-left": "auto", 
+                               "margin-right": "auto",
+                               "width": "30%"}
+                    )
+                ]),
+                """
+                Change your variable
+                """,
+                html.Div([
+                    dcc.RadioItems(
+                        id='variable',
+                        options=[
+                            {'label': 'Confirmed', 'value': 'Confirmed'},
+                            {'label': 'Deaths', 'value': 'Deaths'},
+                            {'label': 'Recovered', 'value': 'Recovered'}
+                        ],
+                        value='Confirmed'
+                    )
+                ]),
+                html.Div([
+                    dcc.Graph(id='graph1')
+                ]), 
+            ]),
+
 # ======= SIR Model ===============================================       
         dcc.Tab(label='SIR Model', children=[
             """
@@ -260,43 +307,6 @@ app.layout = html.Div([
                 )
             ]),
             """
-            Define all variable of SEIR model
-            """,
-            html.Div([
-                dcc.Input(
-                    id='T_inc',
-                    placeholder='Incubation period',
-                    min  =0.0, 
-                    max  =999.0,
-                    step =7,
-                    value=7,
-                    type ='number',
-                    style={'float': 'left', 'width': '5%'}) 
-               ]),
-
-            html.Div([
-                dcc.Input(
-                    id='T_inf',
-                    placeholder='Infection period',
-                    min  =0.0, 
-                    max  =999.0,
-                    step =7,
-                    value=3,
-                    type ='number',
-                    style={'float':'left', 'width':'5%'})
-            ]),
-            html.Div([
-                dcc.Input(
-                    id='R_0',
-                    placeholder='Reproduction number',
-                    min  =10, 
-                    max  =1_200_000,
-                    step =2,
-                    value=5,
-                    type ='number',
-                    style={'int':'left','width':'5%'})
-            ]),
-            """
             Total Population
             """,
             html.Div([
@@ -306,7 +316,44 @@ app.layout = html.Div([
                     min  =1000, 
                     max  =2e9,
                     step =1000,
-                    value=1_200_000,
+                    value=66_000_000,
+                    type ='number',
+                    style={'int':'left','width':'16%'})
+            ]),
+            """
+            Define all variable of SEIR model
+            """,
+            html.Div([
+                dcc.Input(
+                    id='T_inc',
+                    placeholder='Incubation period',
+                    min  =2.0, 
+                    max  =999.0,
+                    step =2,
+                    value=7,
+                    type ='number',
+                    style={'float': 'left', 'width': '5%'}) 
+               ]),
+
+            html.Div([
+                dcc.Input(
+                    id='T_inf',
+                    placeholder='Infection period',
+                    min  =2.0, 
+                    max  =999.0,
+                    step =2,
+                    value=3,
+                    type ='number',
+                    style={'float':'left', 'width':'5%'})
+            ]),
+            html.Div([
+                dcc.Input(
+                    id='R_0',
+                    placeholder='Reproduction number',
+                    min  =2, 
+                    max  =1_200_000,
+                    step =2,
+                    value=5,
                     type ='number',
                     style={'int':'left','width':'5%'})
             ]),
@@ -347,7 +394,7 @@ app.layout = html.Div([
                     placeholder='E parameter',
                     min  =0, 
                     max  =1,
-                    step =.003,
+                    step =.001,
                     value=0,
                     type ='number',
                     style={'int':'left','width':'5%'})
@@ -361,7 +408,7 @@ app.layout = html.Div([
                     placeholder='R parameter',
                     min  =0, 
                     max  =1,
-                    step =.003,
+                    step =.001,
                     value=0,
                     type ='number',
                     style={'int':'left','width':'5%'})
@@ -375,6 +422,112 @@ app.layout = html.Div([
         ]),
     ]),
 ])
+
+# ==========================================================
+# ======= Comparison =======================================
+
+@app.callback(Output('memory_output', 'data'),
+              [Input('memory_countries', 'value')])
+def filter_countries(countries_selected):
+    if not countries_selected:
+        # Return all the rows on initial load/no country selected.
+        return epidemie_df.to_dict('records')
+    
+    df = (epidemie_df.groupby(['Country_Region','day'])
+          .agg({'Confirmed':'sum','Deaths':'sum','Recovered':'sum', 'Latitude':'mean','Longitude':'mean'})
+          .reset_index())
+    
+    filtered = df.query('Country_Region in @countries_selected')
+
+    return filtered.to_dict('records')
+
+@app.callback(Output('memory_graph', 'figure'),
+              [Input('memory_output', 'data'),
+               Input('memory_field', 'value')])
+def on_data_set_graph(data, field):
+    if data is None:
+        raise PreventUpdate
+
+    aggregation = collections.defaultdict(
+        lambda: collections.defaultdict(list))
+
+    for row in data:
+
+        a = aggregation[row['Country_Region']]
+
+        a['name'] = row['Country_Region']
+        a['mode'] = 'lines+markers'
+
+        a['y'].append(row[field])
+        a['x'].append(row['day'])
+
+    return {
+        'data': [x for x in aggregation.values()]
+    }
+
+@app.callback(Output('memory_table', 'data'),
+              [Input('memory_output', 'data')])
+def on_data_set_table(data):
+    if data is None:
+        raise PreventUpdate
+
+    return data
+
+# ==========================================================
+# ======= Callback: Map ====================================
+@app.callback(
+    Output('map', 'figure'),
+    [
+        Input('map_day', 'value'),
+        Input('region', 'value'),
+        Input('var', 'value'),
+        Input('style', 'value'),
+    ]
+)
+def update_map(map_day, region, var, style):
+    day = epidemie_df['day'].unique()[map_day]
+    map_df = (epidemie_df[epidemie_df['day'] == day]
+              .groupby(['Country_Region'])
+              .agg({var: 'sum', 'Latitude': 'mean', 'Longitude': 'mean'})
+              .reset_index())
+    
+    #radius_multiplier = {'inner': 1.5, 'outer': 3}
+    return {
+        'data':[
+            dict(
+                type='scattergeo',
+                lon=map_df['Longitude'],
+                lat=map_df['Latitude'],
+                text=map_df.apply(lambda r: r['Country_Region']+' ('+str(r[var])+')',
+                                  axis=1),
+                mode='markers',
+                marker=dict(
+                    #size=map_df[var]*radius_multiplier['outer']/1000,
+                    colorscale=colorscale,
+                    color=100*map_df[var],
+                    opacity=1,
+                    size=np.maximum(map_df[var] / 1_000, 20)
+                ),
+                
+            )
+        ],
+        'layout': dict(
+            title=var+' on '+str(day),
+            #autosize=True,
+            hovermode='closest',
+            height=600,
+            geo=dict(showland=False),
+            hash=True,
+            #font=dict(family=theme['font-family']),
+            style=style,
+            zoom=regions[region]['zoom'],
+            #margin={"r":0,"t":0,"l":0,"b":0},
+            center=dict(
+                    lat=regions[region]['lat'],
+                    lon=regions[region]['lon'],
+            ),
+        ),
+    }
 
 # ================================================================
 # ======= Callback: Time Series Plot =============================
@@ -391,13 +544,13 @@ def update_graph(country, country2, variable):
     if country is None:
         graph_df = epidemie_df.groupby('day').agg({variable: 'sum'}).reset_index()
     else:
-        graph_df = (epidemie_df[epidemie_df['Country/Region'] == country]
-                    .groupby(['Country/Region', 'day'])
+        graph_df = (epidemie_df[epidemie_df['Country_Region'] == country]
+                    .groupby(['Country_Region', 'day'])
                     .agg({variable: 'sum'})
                     .reset_index())
     if country2 is not None:
-        graph2_df = (epidemie_df[epidemie_df['Country/Region'] == country2]
-                     .groupby(['Country/Region', 'day'])
+        graph2_df = (epidemie_df[epidemie_df['Country_Region'] == country2]
+                     .groupby(['Country_Region', 'day'])
                      .agg({variable: 'sum'})
                      .reset_index())
         
@@ -443,61 +596,6 @@ regions = {
     'oceania': {'lat': -10, 'lon': 130, 'zoom': 2},
 }
 
-# ==========================================================
-# ======= Callback: Map ====================================
-@app.callback(
-    Output('map', 'figure'),
-    [
-        Input('map_day', 'value'),
-        Input('region', 'value'),
-        Input('var', 'value'),
-        Input('style', 'value'),
-    ]
-)
-def update_map(map_day, region, var, style):
-    day = epidemie_df['day'].unique()[map_day]
-    map_df = (epidemie_df[epidemie_df['day'] == day]
-              .groupby(['Country/Region'])
-              .agg({var: 'sum', 'Latitude': 'mean', 'Longitude': 'mean'})
-              .reset_index())
-    
-    #radius_multiplier = {'inner': 1.5, 'outer': 3}
-    return {
-        'data':[
-            dict(
-                type='scattergeo',
-                lon=map_df['Longitude'],
-                lat=map_df['Latitude'],
-                text=map_df.apply(lambda r: r['Country/Region']+' ('+str(r[var])+')',
-                                  axis=1),
-                mode='markers',
-                marker=dict(
-                    #size=map_df[var]*radius_multiplier['outer']/1000,
-                    colorscale=colorscale,
-                    color=map_df[var],
-                    opacity=1,
-                    size=np.maximum(map_df[var] / 1_000, 7)
-                ),
-                
-            )
-        ],
-        'layout': dict(
-            title=var+' on '+str(day),
-            #autosize=True,
-            hovermode='closest',
-            height=750,
-            geo=dict(showland=True),
-            font=dict(family=theme['font-family']),
-            style=style,
-            zoom=regions[region]['zoom'],
-            #margin={"r":0,"t":0,"l":0,"b":0},
-            center=dict(
-                    lat=regions[region]['lat'],
-                    lon=regions[region]['lon'],
-            ),
-        ),
-    }
-
 # ================================================================
 # ======= Callback: SIR Model ====================================
 @app.callback(
@@ -518,8 +616,8 @@ def update_model(pays, beta, gamma, population, optimal):
         pays_df['infected'] = pays_df['Confirmed'].diff()
         
     else:     
-        pays_df = (epidemie_df[epidemie_df['Country/Region'] == pays]
-                   .groupby(['Country/Region', 'day'])
+        pays_df = (epidemie_df[epidemie_df['Country_Region'] == pays]
+                   .groupby(['Country_Region', 'day'])
                    .agg({'Confirmed': 'sum', 'Deaths': 'sum', 'Recovered': 'sum'})
                    .reset_index())
         pays_df['infected'] = pays_df['Confirmed'].diff()
@@ -555,25 +653,25 @@ def update_model(pays, beta, gamma, population, optimal):
     return {
         'data': [
             dict(
-                x=solution.t,
+                x=pays_df['day'],
                 y=solution.y[0],
                 type='line',
                 name=pays+': Susceptible')
         ] + ([
             dict(
-                x=solution.t,
+                x=pays_df['day'],
                 y=solution.y[1],
                 type='line',
                 name=pays+': Infected')
         ]) + ([
             dict(
-                x=solution.t,
+                x=pays_df['day'],
                 y=solution.y[2],
                 type='line',
                 name=pays+': Removed')
         ]) + ([
             dict(
-                x=solution.t,
+                x=pays_df['day'],
                 y=pays_df['infected'],
                 type='line',
                 name=pays+': Original Data(Infected)')
@@ -635,8 +733,8 @@ def update_model(provence, T_inc, T_inf, R_0, N,s,e,i,r, SEIROptimal):
         provence_df['infected'] = provence_df['Confirmed'].diff()
         
     else:     
-        provence_df = (epidemie_df[epidemie_df['Country/Region'] == provence]
-                   .groupby(['Country/Region', 'day'])
+        provence_df = (epidemie_df[epidemie_df['Country_Region'] == provence]
+                   .groupby(['Country_Region', 'day'])
                    .agg({'Confirmed': 'sum', 'Deaths': 'sum', 'Recovered': 'sum'})
                    .reset_index())
         provence_df['infected'] = provence_df['Confirmed'].diff()
